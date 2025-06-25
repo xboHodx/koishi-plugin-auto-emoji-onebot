@@ -43,7 +43,7 @@ export function apply(ctx: Context, config: Config) {
     if ( config.verboseConsoleOutput ) {
       ctx.logger.info(`尝试对用户 ${session.userId} 的消息添加表情。消息内容: ${session.event.message.content.slice(0,10)}`);
     }
-    
+
     await session.onebot._request(
       "set_group_reaction",
       {
@@ -53,7 +53,19 @@ export function apply(ctx: Context, config: Config) {
         "is_add": true
       }
     ).catch((err) => {
-      ctx.logger.error(`添加表情失败: ${err.message}`);
+      ctx.logger.error(`lagrange添加表情失败: ${err.message}`);
+    })
+
+    await session.onebot._request(
+      "set_msg_emoji_like",
+      {
+        "group_id": session.channelId,
+        "message_id": session.event.message.id,
+        "code": "324", 
+        "is_add": true
+      }
+    ).catch((err) => {
+      ctx.logger.error(`napcat添加表情失败: ${err.message}`);
     })
     
   });
