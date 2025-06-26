@@ -56,17 +56,17 @@ export function apply(ctx: Context, config: Config) {
       ctx.logger.error(`lagrange添加表情失败: ${err.message}`);
     })
 
-    await session.onebot._request(
-      "set_msg_emoji_like",
-      {
-        "group_id": session.channelId,
-        "message_id": session.event.message.id,
-        "code": "324", 
-        "is_add": true
-      }
-    ).catch((err) => {
-      ctx.logger.error(`napcat添加表情失败: ${err.message}`);
-    })
+    // await session.onebot._request(
+    //   "set_msg_emoji_like",
+    //   {
+    //     "group_id": session.channelId,
+    //     "message_id": session.event.message.id,
+    //     "code": "324", 
+    //     "is_add": true
+    //   }
+    // ).catch((err) => {
+    //   ctx.logger.error(`napcat添加表情失败: ${err.message}`);
+    // })
     
   });
 
