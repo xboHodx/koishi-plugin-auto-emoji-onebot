@@ -1,4 +1,4 @@
-import { Context, Schema } from 'koishi'
+import { Context, Schema, h } from 'koishi'
 import {} from 'koishi-plugin-adapter-onebot';
 
 export const name = 'auto-emoji-onebot'
@@ -24,6 +24,7 @@ export const Config: Schema<Config> = Schema.intersect([
 
 export function apply(ctx: Context, config: Config) {
 
+  //给指定人回复吃糖表情
   ctx.on('message', async (session) => {
 
     if (!config.reactUserIdList.includes(session.userId)) {
@@ -66,8 +67,29 @@ export function apply(ctx: Context, config: Config) {
     //   }
     // ).catch((err) => {
     //   ctx.logger.error(`napcat添加表情失败: ${err.message}`);
-    // })
-    
+    // })    
   });
+
+  //回复相同表情
+  ctx.on('message', async (session) => {
+    for ( const element of h.select(h.parse(session.content), 'face')){
+      if ( element.attrs?.id ) {
+        ctx.logger.info(`发现表情，回复相同表情，id=${element.attrs.id}`);
+        await session.onebot._request(
+          "set_group_reaction",
+          {
+            "group_id": session.channelId,
+            "message_id": session.event.message.id,
+            "code": element.attrs.id, 
+            "is_add": true
+          }
+        )
+        // await session.onebot._request(
+        //   'set_msg_emoji_like', 
+        //   { message_id: session.messageId, emoji_id: element.attrs.id }
+        // )
+      }
+    }
+  })
 
 }
