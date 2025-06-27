@@ -5,6 +5,7 @@ export const name = 'auto-emoji-onebot'
 
 export interface Config {
   reactUserIdList: string[];
+  reactSameEmoji: boolean;
   verboseConsoleOutput: boolean;
 }
 
@@ -13,7 +14,10 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     reactUserIdList: Schema.array(String)
     .default(["1830540513"])
-    .description("")
+    .description(""),
+    reactSameEmoji: Schema.boolean()
+    .default(false)
+    .description("是否回应相同表情")
   }).description("基础设置"),
 
   Schema.object({
@@ -72,9 +76,13 @@ export function apply(ctx: Context, config: Config) {
 
   //回复相同表情
   ctx.on('message', async (session) => {
+    if ( !config.reactSameEmoji )
+      return;
+
     for ( const element of h.select(h.parse(session.content), 'face')){
       if ( element.attrs?.id ) {
-        ctx.logger.info(`发现表情，回复相同表情，id=${element.attrs.id}`);
+        if ( config.verboseConsoleOutput )
+          ctx.logger.info(`发现表情，回复相同表情，id=${element.attrs.id}`);
         await session.onebot._request(
           "set_group_reaction",
           {
