@@ -61,17 +61,16 @@ export function apply(ctx: Context, config: Config) {
       ctx.logger.error(`lagrange添加表情失败: ${err.message}`);
     })
 
-    // await session.onebot._request(
-    //   "set_msg_emoji_like",
-    //   {
-    //     "group_id": session.channelId,
-    //     "message_id": session.event.message.id,
-    //     "code": "324", 
-    //     "is_add": true
-    //   }
-    // ).catch((err) => {
-    //   ctx.logger.error(`napcat添加表情失败: ${err.message}`);
-    // })    
+    await session.onebot._request(
+      "set_msg_emoji_like",
+      {
+        message_id: session.event.message.id,
+        emoji_id: 324, 
+      }
+    ).catch((err) => {
+      ctx.logger.error(`napcat添加表情失败: ${err.message}`);
+    })    
+
   });
 
   //回复相同表情
@@ -92,10 +91,13 @@ export function apply(ctx: Context, config: Config) {
             "is_add": true
           }
         )
-        // await session.onebot._request(
-        //   'set_msg_emoji_like', 
-        //   { message_id: session.messageId, emoji_id: element.attrs.id }
-        // )
+        await session.onebot._request(
+          'set_msg_emoji_like', 
+          { 
+            message_id: session.messageId, 
+            emoji_id: element.attrs.id
+          }
+        )
       }
     }
   })
