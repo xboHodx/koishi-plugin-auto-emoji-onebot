@@ -15,20 +15,93 @@ function getOneBot(session: Session) {
   if (onebot && typeof onebot._request === 'function') return onebot
 }
 
+export interface EmojiRule {
+  groupIds: string[];
+  userIds: string[];
+  emojiIds: number[];
+}
+
 export interface Config {
-  reactUserIdList: string[];
+  rules: EmojiRule[];
   reactSameEmoji: boolean;
   verboseConsoleOutput: boolean;
-  emojiId: number;
+}
+
+const EmojiRuleSchema: Schema<EmojiRule> = Schema.object({
+  groupIds: Schema.array(Schema.string().required())
+    .role('table')
+    .description('生效群号列表')
+    .required(),
+  userIds: Schema.array(Schema.string().required())
+    .role('table')
+    .description('生效用户列表')
+    .required(),
+  emojiIds: Schema.array(Schema.number().required())
+    .role('table')
+    .description('自动添加的表情 ID 列表')
+    .required(),
+})
+
+function getMatchedEmojiIds(rules: EmojiRule[], groupId: string, userId: string) {
+  const matchedEmojiIds: number[] = []
+
+  for (const rule of rules) {
+    if (!rule.groupIds.includes(groupId)) continue
+    if (!rule.userIds.includes(userId)) continue
+    matchedEmojiIds.push(...rule.emojiIds)
+  }
+
+  return [...new Set(matchedEmojiIds)]
+}
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err)
+}
+
+function getReactionTarget(session: Session) {
+  const groupId = session.channelId
+  const messageId = session.event.message?.id ?? session.messageId
+
+  if (!groupId || !messageId) return
+
+  return { groupId, messageId }
+}
+
+async function addEmojiReaction(
+  ctx: Context,
+  target: { groupId: string; messageId: string },
+  onebot: OneBotLike,
+  emojiId: number,
+) {
+  await onebot._request(
+    "set_group_reaction",
+    {
+      "group_id": target.groupId,
+      "message_id": target.messageId,
+      "code": String(emojiId),
+      "is_add": true
+    }
+  ).catch((err) => {
+    ctx.logger.error(`lagrange添加表情失败: ${getErrorMessage(err)}`);
+  })
+
+  await onebot._request(
+    "set_msg_emoji_like",
+    {
+      message_id: target.messageId,
+      emoji_id: emojiId,
+    }
+  ).catch((err) => {
+    ctx.logger.error(`napcat添加表情失败: ${getErrorMessage(err)}`);
+  })
 }
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    reactUserIdList: Schema.array(String)
-      .description("目标用户"),
-    emojiId: Schema.number()
-      .default(324)
-      .description("自动回应使用的表情 ID"),
+    rules: Schema.array(EmojiRuleSchema)
+      .role('table')
+      .default([])
+      .description("在哪些群对哪些人自动添加哪些表情"),
     reactSameEmoji: Schema.boolean()
       .default(false)
       .description("是否回应相同表情")
@@ -42,13 +115,6 @@ export const Config: Schema<Config> = Schema.intersect([
 
 export function apply(ctx: Context, config: Config) {
   ctx.on('message', async (session) => {
-    if (!config.reactUserIdList.includes(session.userId)) {
-      if (config.verboseConsoleOutput) {
-        ctx.logger.info(`用户id ${session.userId} 不在列表中，跳过。`);
-      }
-      return;
-    }
-
     const onebot = getOneBot(session)
     if (!onebot) {
       if (config.verboseConsoleOutput) {
@@ -57,31 +123,38 @@ export function apply(ctx: Context, config: Config) {
       return;
     }
 
-    if (config.verboseConsoleOutput) {
-      ctx.logger.info(`尝试对用户 ${session.userId} 的消息添加表情。消息内容: ${session.event.message.content.slice(0, 10)}`);
+    const target = getReactionTarget(session)
+    if (!target) {
+      if (config.verboseConsoleOutput) {
+        ctx.logger.info('当前消息缺少群号或消息 ID，跳过自动表情。')
+      }
+      return
     }
 
-    await onebot._request(
-      "set_group_reaction",
-      {
-        "group_id": session.channelId,
-        "message_id": session.event.message.id,
-        "code": String(config.emojiId),
-        "is_add": true
+    const userId = session.userId
+    if (!userId) {
+      if (config.verboseConsoleOutput) {
+        ctx.logger.info(`群 ${target.groupId} 的消息缺少用户 ID，跳过自动表情。`)
       }
-    ).catch((err) => {
-      ctx.logger.error(`lagrange添加表情失败: ${err.message}`);
-    })
+      return
+    }
 
-    await onebot._request(
-      "set_msg_emoji_like",
-      {
-        message_id: session.event.message.id,
-        emoji_id: config.emojiId,
+    const matchedEmojiIds = getMatchedEmojiIds(config.rules, target.groupId, userId)
+
+    if (!matchedEmojiIds.length) {
+      if (config.verboseConsoleOutput) {
+        ctx.logger.info(`群 ${target.groupId} 中用户 ${userId} 未命中任何自动表情规则。`);
       }
-    ).catch((err) => {
-      ctx.logger.error(`napcat添加表情失败: ${err.message}`);
-    })
+      return;
+    }
+
+    if (config.verboseConsoleOutput) {
+      ctx.logger.info(`群 ${target.groupId} 中用户 ${userId} 命中规则，准备添加表情: ${matchedEmojiIds.join(', ')}`);
+    }
+
+    for (const emojiId of matchedEmojiIds) {
+      await addEmojiReaction(ctx, target, onebot, emojiId)
+    }
   });
 
   //回复相同表情
@@ -97,15 +170,25 @@ export function apply(ctx: Context, config: Config) {
       return;
     }
 
-    for (const element of h.select(h.parse(session.content), 'face')) {
+    const target = getReactionTarget(session)
+    if (!target) {
+      if (config.verboseConsoleOutput) {
+        ctx.logger.info('当前消息缺少群号或消息 ID，跳过相同表情回复。')
+      }
+      return
+    }
+
+    const content = session.content ?? ''
+
+    for (const element of h.select(h.parse(content), 'face')) {
       if (element.attrs?.id) {
         if (config.verboseConsoleOutput)
           ctx.logger.info(`发现表情，回复相同表情，id=${element.attrs.id}`);
         await onebot._request(
           "set_group_reaction",
           {
-            "group_id": session.channelId,
-            "message_id": session.event.message.id,
+            "group_id": target.groupId,
+            "message_id": target.messageId,
             "code": element.attrs.id,
             "is_add": true
           }
@@ -113,7 +196,7 @@ export function apply(ctx: Context, config: Config) {
         await onebot._request(
           'set_msg_emoji_like',
           {
-            message_id: session.messageId,
+            message_id: target.messageId,
             emoji_id: element.attrs.id
           }
         )
