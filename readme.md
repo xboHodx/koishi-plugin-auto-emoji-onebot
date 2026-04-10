@@ -6,6 +6,8 @@
 
 除了静态 `rules` 之外，还支持运行时表情配置命令。运行时配置按「当前用户 + 当前群」保存，彼此独立，不会影响其他群，也不会影响其他用户的设置。
 
+感谢 https://gitee.com/vincent-zyu/koishi-plugin-auto-emoji-onebot 的原始代码
+
 ## 配置说明
 
 - `rules`: 规则列表
